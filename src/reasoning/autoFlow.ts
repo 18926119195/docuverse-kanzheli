@@ -35,6 +35,11 @@ import {
   type SeedRange,
   type SeedRangeDraft,
 } from './seedRange'
+import {
+  mergeHotPeekCandidates,
+  stashHungerForIngest,
+  hungerStillOpen,
+} from './ingestLlmFeed'
 import { chunkUniqueKeys, runBatchesParallel } from '../arch/parallelLlmBatch'
 import { deskMonitorAttentionArrival } from './attentionArrival'
 import {
@@ -1056,6 +1061,8 @@ export async function runAutoFlow(input: {
     })
 
     if (action === 'done') {
+      useAttentionIo.getState().clearPendingHunger()
+      useAttentionIo.getState().clearPendingIngestFeed()
       break
     }
 
@@ -1156,16 +1163,43 @@ export async function runAutoFlow(input: {
     })
     notes.push(expanded.note)
     if (expanded.bookKeys.length === 0) {
+      stashHungerForIngest({
+        queryKey: turnQueryKey,
+        closed: closedForPeek,
+        reason: '热启展开为空（区间页可能尚在后台 OCR）',
+      })
       return {
         ok: true,
         answer: parts.join('\n\n'),
-        note: `自动流暂停 · ${expanded.note} · ${notes.join(' → ')}`,
+        note: `自动流暂停 · ${expanded.note} · 已挂起饥饿闭集等后台 · ${notes.join(' → ')}`,
       }
     }
 
-    // 优先铸未开；区间仅已开则仍投递（修订语义）
-    const candidates =
-      expanded.unopened.length > 0 ? expanded.unopened : expanded.bookKeys
+    // 挂起饥饿：即使本轮有候选，后台新页仍可继续补贴（本问仍 insufficient 时）
+    if (hungerStillOpen(turnQueryKey)) {
+      useAttentionIo.getState().setPendingHunger({
+        queryKey: turnQueryKey,
+        closed: closedForPeek,
+      })
+    }
+
+    // 优先铸未开；区间仅已开则仍投递（修订语义）；并吃后台饲料
+    const candidates = mergeHotPeekCandidates({
+      expandedUnopened: expanded.unopened,
+      expandedAll: expanded.bookKeys,
+    })
+    if (candidates.length === 0) {
+      stashHungerForIngest({
+        queryKey: turnQueryKey,
+        closed: closedForPeek,
+        reason: '热启候选空',
+      })
+      return {
+        ok: true,
+        answer: parts.join('\n\n'),
+        note: `自动流暂停 · 热启候选空 · ${notes.join(' → ')}`,
+      }
+    }
 
     input.onProgress?.(
       `自动流 · 热启 peek（闭集×${expanded.usedClosed.length} · N=${candidates.length}）…`,
@@ -1186,14 +1220,16 @@ export async function runAutoFlow(input: {
         `### 自动流 · 热启 peek\n${hotPeek.note || '区间无新贴'}`,
       )
       notes.push(hotPeek.note || '热启peek空')
-      deskPromptSafety(
-        `写信台 · 热启 peek 无新门贴（${hotPeek.note || '区间空'}）。可放宽 seedRange 或旁路选手选 peek。`,
-      )
+      stashHungerForIngest({
+        queryKey: turnQueryKey,
+        closed: closedForPeek,
+        reason: `热启 peek 无新门贴（${hotPeek.note || '区间空'}）`,
+      })
       return {
         ok: true,
         answer: parts.join('\n\n'),
         note:
-          `自动流暂停 · 热启 peek 无新门贴 · ${notes.join(' → ')}`,
+          `自动流暂停 · 热启 peek 无新门贴 · 已挂起等后台 · ${notes.join(' → ')}`,
       }
     }
 

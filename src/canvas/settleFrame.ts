@@ -1,5 +1,6 @@
 /**
  * 结算架：C 固定 + 单锚一页；多 book 列表切换时转球进槽（不动相机）。
+ * 写信台工作台：先 ensurePageForAudit 物化页图再亮球。
  */
 
 import * as THREE from 'three'
@@ -18,13 +19,11 @@ export type SettlementKind = 'reuse' | 'path'
 
 type LockedSettlementFrame = {
   kind: SettlementKind
-  /** 机位锁定时的 eye / lookAt（世界） */
   eye: [number, number, number]
   lookAt: [number, number, number]
   yaw: number
   pitch: number
   distance: number
-  /** 槽位对准的环角（目标页应转到此角） */
   slotRingAngle: number
   activeBookKey: string
 }
@@ -65,14 +64,28 @@ function applyCamera(frame: LockedSettlementFrame) {
   })
 }
 
+async function prepareAuditPage(
+  bookKey: string,
+  bookIndex: BookIndex,
+): Promise<number | null> {
+  const strand = pageOfBookKey(bookKey, bookIndex)
+  if (strand == null) return null
+  await useDocuverse.getState().ensurePageForAudit(strand)
+  useDocuverse.getState().revealSphereForAudit()
+  return strand
+}
+
 /**
- * 进入结算架：以当前 bookKey 单锚定 C，锁机位；之后列表切页只转球。
+ * 进入结算架：先按需物化审计页图，再锁 C。
  */
-export function enterSettlementSingleAnchor(input: {
+export async function enterSettlementSingleAnchor(input: {
   kind: SettlementKind
   bookKey: string
   bookIndex: BookIndex
-}): boolean {
+}): Promise<boolean> {
+  const strand = await prepareAuditPage(input.bookKey, input.bookIndex)
+  if (strand == null) return false
+
   const pages = useDocuverse.getState().pages.length
   const host = bookKeyHostWorld(input.bookKey, input.bookIndex, pages)
   if (!host) return false
@@ -95,10 +108,7 @@ export function enterSettlementSingleAnchor(input: {
   const lookAt = m
   const { yaw, pitch } = radialToYawPitch(eyeV)
 
-  const strand = pageOfBookKey(input.bookKey, input.bookIndex)
-  if (strand == null) return false
   const total = Math.max(pages, 1)
-  // 锁架时 offset=0，槽角 = 该页自然角
   clearPokerYawOffset()
   const slotRingAngle = naturalRingAngle(strand, total)
 
@@ -122,16 +132,15 @@ export function enterSettlementSingleAnchor(input: {
       /* 结算架禁止 swoop 改机位；仅高亮 */
     },
   })
-  // focus 可能改镜头：立即打回锁定架
   applyCamera(locked)
   return true
 }
 
-/** 列表切 book：转球进固定槽，C/机位不动 */
-export function settlementSelectBookKey(input: {
+/** 列表切 book：先物化该页，再转球进固定槽 */
+export async function settlementSelectBookKey(input: {
   bookKey: string
   bookIndex: BookIndex
-}): boolean {
+}): Promise<boolean> {
   if (!locked) {
     return enterSettlementSingleAnchor({
       kind: 'path',
@@ -139,7 +148,7 @@ export function settlementSelectBookKey(input: {
       bookIndex: input.bookIndex,
     })
   }
-  const strand = pageOfBookKey(input.bookKey, input.bookIndex)
+  const strand = await prepareAuditPage(input.bookKey, input.bookIndex)
   if (strand == null) return false
   const total = Math.max(useDocuverse.getState().pages.length, 1)
   const natural = naturalRingAngle(strand, total)
@@ -165,6 +174,7 @@ export function getSettlementFrame(): LockedSettlementFrame | null {
 export function exitSettlementFrame(): void {
   locked = null
   clearPokerYawOffset()
+  useDocuverse.getState().hideSphereAfterAudit()
   useDocuverse.setState({
     commentLayerExpanded: false,
     settlementSphereEpoch: useDocuverse.getState().settlementSphereEpoch + 1,

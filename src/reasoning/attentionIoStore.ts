@@ -407,6 +407,21 @@ interface AttentionIoState {
   /** 各 LLM：输入 key → 增量三态（unread/sufficient/insufficient） */
   keyIncrementStatuses: KeyIncrementStatusRow[]
   /**
+   * 热启饥饿：decide 写了闭集但展开为空（常因中间页尚未 OCR）。
+   * 后台入账后 noteBookIndexAugmented 只在仍 insufficient 时补给。
+   */
+  pendingHunger: null | { queryKey: string; closed: Array<{ from: string; to: string }> }
+  /** 待热启 peek 的 bookKey（后台新入账 ∩ 饥饿闭集未开） */
+  pendingIngestFeedBookKeys: string[]
+  setPendingHunger: (h: {
+    queryKey: string
+    closed: Array<{ from: string; to: string }>
+  }) => void
+  clearPendingHunger: () => void
+  offerPendingIngestFeed: (bookKeys: string[]) => void
+  takePendingIngestFeed: () => string[]
+  clearPendingIngestFeed: () => void
+  /**
    * 下一笔落账用的时序序号（从 1 起）。
    * 调度（隐→显）与注意力切换分轨；本计数只服务 LTM 落账次序。
    */
@@ -702,6 +717,21 @@ interface AttentionIoState {
   /** 本问已进过主推理 → 换新意图会话 */
   bumpIntentSessionAfterMainInfer: (reason?: string) => void
   clearAll: () => void
+  /** 水合长期记忆（key + 母系）；不碰 pending / deskPackages / steps */
+  hydrateKeyLineageMemory: (input: {
+    settledQueries: Record<string, string>
+    queryParentOf: Record<string, string>
+    queryKeyToBriefKeys: Record<string, string[]>
+    prospects: ProspectRecord[]
+    paths: PathRecord[]
+    norms: NormRecord[]
+    inferEdges: InferEdge[]
+    neighbours: NeighbourRecord[]
+    queryReuseLinks: QueryReuseLink[]
+    deskDeliveries: DeskDeliveryLink[]
+    keyIncrementStatuses: KeyIncrementStatusRow[]
+    nextSettleSeq?: number
+  }) => void
   /** 兼容旧调用 */
   toggleWm: (edgeId: string) => void
   setWm: (edgeId: string, on: boolean) => void
@@ -771,6 +801,8 @@ export const useAttentionIo = create<AttentionIoState>((set, get) => ({
   pendingPathMatch: null,
   pendingReuseProposal: null,
   keyIncrementStatuses: [],
+  pendingHunger: null,
+  pendingIngestFeedBookKeys: [],
   nextSettleSeq: 1,
   deskDeliveries: [],
   llmCallLedger: [],
@@ -2363,6 +2395,37 @@ export const useAttentionIo = create<AttentionIoState>((set, get) => ({
   },
   setLastStatus: (msg) => set({ lastStatus: msg }),
   setDeskPrompt: (msg) => set({ deskPrompt: msg }),
+
+  setPendingHunger: (h) =>
+    set({
+      pendingHunger: {
+        queryKey: h.queryKey.trim(),
+        closed: h.closed
+          .map((c) => ({ from: c.from.trim(), to: c.to.trim() }))
+          .filter((c) => c.from && c.to),
+      },
+    }),
+
+  clearPendingHunger: () => set({ pendingHunger: null }),
+
+  offerPendingIngestFeed: (bookKeys) => {
+    const add = bookKeys.map((k) => k.trim()).filter(Boolean)
+    if (add.length === 0) return
+    set((s) => ({
+      pendingIngestFeedBookKeys: [
+        ...new Set([...s.pendingIngestFeedBookKeys, ...add]),
+      ],
+    }))
+  },
+
+  takePendingIngestFeed: () => {
+    const keys = get().pendingIngestFeedBookKeys
+    if (keys.length === 0) return []
+    set({ pendingIngestFeedBookKeys: [] })
+    return keys
+  },
+
+  clearPendingIngestFeed: () => set({ pendingIngestFeedBookKeys: [] }),
   clearDeskPrompt: () => set({ deskPrompt: null }),
   pushIntentDeskLog: ({ question, action, note }) => {
     const entry: IntentDeskLogEntry = {
@@ -2391,6 +2454,88 @@ export const useAttentionIo = create<AttentionIoState>((set, get) => ({
       note: reason || `epoch→${next} · after infer`,
     })
   },
+
+  hydrateKeyLineageMemory: (input) => {
+    const uniqBy = <T,>(rows: T[], keyOf: (r: T) => string): T[] => {
+      const seen = new Set<string>()
+      const out: T[] = []
+      for (const r of rows) {
+        const k = keyOf(r)
+        if (!k || seen.has(k)) continue
+        seen.add(k)
+        out.push(r)
+      }
+      return out
+    }
+    set((s) => {
+      const settledQueries = {
+        ...s.settledQueries,
+        ...input.settledQueries,
+      }
+      const queryParentOf = {
+        ...s.queryParentOf,
+        ...input.queryParentOf,
+      }
+      const queryKeyToBriefKeys = { ...s.queryKeyToBriefKeys }
+      for (const [qk, briefs] of Object.entries(input.queryKeyToBriefKeys)) {
+        const prev = queryKeyToBriefKeys[qk] ?? []
+        queryKeyToBriefKeys[qk] = [
+          ...new Set([...prev, ...briefs.map((b) => b.trim()).filter(Boolean)]),
+        ]
+      }
+      const questionFingerprintToQueryKey = {
+        ...s.questionFingerprintToQueryKey,
+      }
+      for (const [qk, text] of Object.entries(input.settledQueries)) {
+        const t = (text || '').trim()
+        if (!t) continue
+        questionFingerprintToQueryKey[contentFingerprint(t)] = qk
+      }
+      return {
+        settledQueries,
+        queryParentOf,
+        queryKeyToBriefKeys,
+        questionFingerprintToQueryKey,
+        prospects: uniqBy(
+          [...s.prospects, ...input.prospects],
+          (p) => p.prospectKey,
+        ),
+        paths: uniqBy([...s.paths, ...input.paths], (p) => p.pathKey),
+        norms: uniqBy([...s.norms, ...input.norms], (n) => n.normKey),
+        inferEdges: uniqBy(
+          [...s.inferEdges, ...input.inferEdges],
+          (e) => e.inferKey,
+        ),
+        neighbours: uniqBy(
+          [...s.neighbours, ...input.neighbours],
+          (n) => n.neighbourKey,
+        ),
+        queryReuseLinks: uniqBy(
+          [...s.queryReuseLinks, ...input.queryReuseLinks],
+          (r) => r.reuseKey,
+        ),
+        deskDeliveries: uniqBy(
+          [...s.deskDeliveries, ...input.deskDeliveries],
+          (d) => d.id || `${d.settleSeq}|${d.job}|${d.toKey}`,
+        ),
+        keyIncrementStatuses: uniqBy(
+          [...s.keyIncrementStatuses, ...input.keyIncrementStatuses],
+          (r) => `${r.job}|${r.key}|${r.queryKey ?? ''}|${r.settleSeq}`,
+        ),
+        nextSettleSeq: Math.max(
+          s.nextSettleSeq || 1,
+          typeof input.nextSettleSeq === 'number' ? input.nextSettleSeq : 1,
+          ...[...s.deskDeliveries, ...input.deskDeliveries].map(
+            (d) => (d.settleSeq ?? 0) + 1,
+          ),
+          ...[...s.keyIncrementStatuses, ...input.keyIncrementStatuses].map(
+            (r) => (r.settleSeq ?? 0) + 1,
+          ),
+        ),
+      }
+    })
+  },
+
   clearAll: () =>
     set({
       steps: [],
@@ -2423,6 +2568,8 @@ export const useAttentionIo = create<AttentionIoState>((set, get) => ({
       pendingPathMatch: null,
       pendingReuseProposal: null,
       keyIncrementStatuses: [],
+      pendingHunger: null,
+      pendingIngestFeedBookKeys: [],
       deskDeliveries: [],
       llmCallLedger: [],
       nextLlmCallTurnSeq: 1,

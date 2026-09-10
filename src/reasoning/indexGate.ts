@@ -1,5 +1,6 @@
 /**
  * Post-upload gate: OCR → A1 build → ready for questions.
+ * 扫描件：页级并行渲→emit；语料包可 hydrate 跳过重跑。
  * TOC wizard: 选目录页 → toc_map（strand 主坐标）→ confirm；可跳过。
  */
 
@@ -15,6 +16,7 @@ import {
   buildSemanticFromTocEntries,
   buildSemanticIndex,
   emptySemanticIndex,
+  reconcileTocMemberKeys,
   semanticTocReady,
   type BookSemanticIndex,
 } from './semanticIndex'
@@ -77,6 +79,11 @@ interface IndexGateState {
   }
   /** Skip formal TOC; clear heuristic sections — no fake one-page TOC */
   skipTocWizard: () => void
+  /** 语料包恢复：直接挂已有 A1/目录，跳过 OCR 建库 */
+  hydrateFromCorpusPack: (input: {
+    bookIndex: BookIndex
+    semanticIndex: BookSemanticIndex | null
+  }) => void
 }
 
 export const useIndexGate = create<IndexGateState>((set, get) => ({
@@ -197,11 +204,22 @@ export const useIndexGate = create<IndexGateState>((set, get) => ({
       .join(',')
     const prevReady = get().ready
     const prevToc = get().tocStatus
-    set({
-      phase: 'embedding',
-      message: `正在同步索引（${pagesLabel || '页'}）…`,
-      lastError: null,
-    })
+    const prevPhase = get().phase
+    const prevMessage = get().message
+    const prevWizardOpen = get().tocWizardOpen
+    /** 目录向导已开 / 已确认时：后台增量同步，不打断选页与 toc_map */
+    const bg =
+      prevWizardOpen ||
+      prevToc === 'pending' ||
+      prevToc === 'confirmed' ||
+      prevToc === 'skipped'
+    if (!bg) {
+      set({
+        phase: 'embedding',
+        message: `正在同步索引（${pagesLabel || '页'}）…`,
+        lastError: null,
+      })
+    }
     try {
       const existing =
         get().bookIndex && get().bookIndex!.docId === input.docId
@@ -218,40 +236,73 @@ export const useIndexGate = create<IndexGateState>((set, get) => ({
       void import('./pageMarkStore').then(({ usePageMarkStore }) => {
         usePageMarkStore.getState().syncLayoutFromBookIndex(index)
       })
-      // Keep confirmed TOC; keep empty skip shell; else rebuild heuristic for wizard only
+      // 后台新页 → 仅当本问仍 insufficient 时补给热启饲料（不冲三态闸）
+      {
+        const prevKeys = new Set((existing?.chunks ?? []).map((c) => c.key))
+        const newBookKeys = index.chunks
+          .map((c) => c.key)
+          .filter((k) => !prevKeys.has(k))
+        if (newBookKeys.length > 0) {
+          void import('./ingestLlmFeed').then(({ noteBookIndexAugmented }) => {
+            noteBookIndexAugmented({
+              docId: input.docId,
+              bookIndex: index,
+              newBookKeys,
+            })
+          })
+        }
+      }
+      // Keep confirmed TOC（回填 pageRange∩A1）；keep empty skip shell；else rebuild heuristic for wizard only
       let semantic = get().semanticIndex
       if (semantic?.tocSkipped && semantic.docId === index.docId) {
         semantic = emptySemanticIndex(index.docId)
+      } else if (semantic?.tocConfirmed && semantic.docId === index.docId) {
+        semantic = reconcileTocMemberKeys(semantic, index)
       } else if (
-        !semantic ||
-        !semantic.tocConfirmed ||
-        semantic.docId !== index.docId
+        !(prevToc === 'pending' && prevWizardOpen) &&
+        (!semantic ||
+          semantic.docId !== index.docId ||
+          !semantic.tocConfirmed)
       ) {
         semantic = buildSemanticIndex(index)
       }
-      saveSemanticIndex(semantic)
-      const tocOk = semanticTocReady(semantic)
+      if (semantic) saveSemanticIndex(semantic)
+      const tocOk = semantic ? semanticTocReady(semantic) : false
+      const memberN =
+        semantic?.tocConfirmed === true
+          ? semantic.sections.reduce(
+              (n, s) => n + (s.memberKeys?.length ?? 0),
+              0,
+            )
+          : 0
       set({
         bookIndex: index,
         semanticIndex: semantic,
-        ready: tocOk,
-        phase: tocOk ? 'ready' : 'embedding',
-        message: tocOk
-          ? `文献就绪 · ${index.chunks.length} 段 · ${semantic.sections.length} 节（已同步 ${pagesLabel}）`
-          : `同步完成但目录未就绪 · ${pagesLabel}`,
+        ready: bg ? prevReady || tocOk : tocOk,
+        phase: bg ? prevPhase : tocOk ? 'ready' : 'embedding',
+        message: bg
+          ? semantic?.tocConfirmed
+            ? `目录已确认 · 归属随页回填 · ${index.chunks.length} 段 · memberKeys×${memberN}`
+            : prevMessage
+          : tocOk
+            ? `文献就绪 · ${index.chunks.length} 段 · ${semantic?.sections.length ?? 0} 节（已同步 ${pagesLabel}）`
+            : `同步完成但目录未就绪 · ${pagesLabel}`,
         lastError: null,
         tocStatus: prevToc === 'confirmed' ? 'confirmed' : prevToc,
+        tocWizardOpen: prevWizardOpen,
       })
       return index
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       set({
-        phase: prevReady ? 'ready' : 'error',
+        phase: prevReady ? 'ready' : bg ? prevPhase : 'error',
         ready: prevReady,
-        message: prevReady
-          ? `${get().bookIndex ? `文献就绪 · ${get().bookIndex!.chunks.length} 段可检索` : get().message} · 同步失败: ${msg}`
+        message: prevReady || bg
+          ? `${prevMessage} · 同步失败: ${msg}`
           : msg,
         lastError: msg,
+        tocWizardOpen: prevWizardOpen,
+        tocStatus: prevToc,
       })
       throw e
     }
@@ -273,7 +324,7 @@ export const useIndexGate = create<IndexGateState>((set, get) => ({
         prev?.tocSkipped && prev.docId === index.docId
           ? emptySemanticIndex(index.docId)
           : prev?.tocConfirmed && prev.docId === index.docId
-            ? prev
+            ? reconcileTocMemberKeys(prev, index)
             : buildSemanticIndex(index)
       saveSemanticIndex(semantic)
       set({
@@ -337,6 +388,45 @@ export const useIndexGate = create<IndexGateState>((set, get) => ({
       lastError: null,
     })
     return { ok: true }
+  },
+
+  hydrateFromCorpusPack: (input) => {
+    const { bookIndex, semanticIndex } = input
+    saveBookIndex(bookIndex)
+    let semantic =
+      semanticIndex && semanticIndex.docId === bookIndex.docId
+        ? semanticIndex
+        : buildSemanticIndex(bookIndex)
+    if (semantic.tocConfirmed && !semantic.tocSkipped) {
+      semantic = reconcileTocMemberKeys(semantic, bookIndex)
+    }
+    saveSemanticIndex(semantic)
+    void import('./pageMarkStore').then(({ usePageMarkStore }) => {
+      usePageMarkStore.getState().syncLayoutFromBookIndex(bookIndex)
+    })
+    const confirmed = semantic.tocConfirmed === true
+    const skipped = semantic.tocSkipped === true
+    const tocOk = semanticTocReady(semantic)
+    const memberN = confirmed
+      ? semantic.sections.reduce((n, s) => n + (s.memberKeys?.length ?? 0), 0)
+      : 0
+    set({
+      bookIndex,
+      semanticIndex: semantic,
+      ready: true,
+      phase: 'ready',
+      message: confirmed
+        ? `语料包已载入 · ${bookIndex.chunks.length} 段 · 目录已确认 · 归属回填 memberKeys×${memberN}`
+        : skipped
+          ? `语料包已载入 · ${bookIndex.chunks.length} 段 · 目录曾跳过`
+          : tocOk
+            ? `语料包已载入 · ${bookIndex.chunks.length} 段 · 请确认或跳过目录`
+            : `语料包已载入 · ${bookIndex.chunks.length} 段`,
+      lastError: null,
+      tocStatus: confirmed ? 'confirmed' : skipped ? 'skipped' : tocOk ? 'pending' : 'idle',
+      tocWizardOpen: !confirmed && !skipped && tocOk,
+      pageCalibration: semantic.pageCalibration ?? null,
+    })
   },
 
   skipTocWizard: () => {

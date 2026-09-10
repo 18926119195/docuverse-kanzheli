@@ -70,6 +70,7 @@ import {
   type OcrBlock,
   type OcrPageResult,
 } from '../data/ocrService'
+import { clearPageImageVault } from '../data/pageImageVault'
 import { emitPageViaProtocol } from '../reasoning/emitClient'
 import { useIndexGate } from '../reasoning/indexGate'
 import type { FlinkType } from '../zigzag/types'
@@ -560,7 +561,31 @@ interface DocuverseState {
     pages: PageDocument[]
     connections: ResolvedConnection[]
     label: string
+    /** 语料包 / 并行 ingest 可直接带上 OCR */
+    ocrByStrand?: Record<number, OcrPageResult>
+    /**
+     * 写信台工作台：默认不亮球；结算审计 bookKey 时再出页图。
+     * 瘦载入语料包时应 true。
+     */
+    letterWorkbench?: boolean
   }) => void
+  /** 后台中间页落账：替换 stub 页 + 合并 OCR，不重置工作区 */
+  mergeIngestPage: (page: PageDocument, ocr: OcrPageResult) => void
+  /**
+   * 审计用：物化该 strand 页图（金库 data URI → blob），并亮球。
+   * 已有 imageUrl 则只亮球。
+   */
+  ensurePageForAudit: (
+    strandIndex: number,
+    opts?: { focus?: boolean },
+  ) => Promise<{ ok: boolean; note: string }>
+  revealSphereForAudit: () => void
+  hideSphereAfterAudit: () => void
+  setLetterWorkbenchMode: (on: boolean) => void
+  /** 写信台优先：隐藏球直到审计 */
+  letterWorkbenchMode: boolean
+  /** 结算审计时临时亮球 */
+  sphereAuditOpen: boolean
   /** Wipe emphases / links / bonds / beams (memory + localStorage). Pages stay. */
   clearWorkspaceAnnotations: () => void
   setUploadProgress: (
@@ -616,6 +641,7 @@ interface DocuverseState {
    */
   runOcrOnPagesLackingText: (opts?: {
     maxPages?: number
+    concurrency?: number
     onProgress?: (done: number, total: number, strand: number) => void
     deferIndexSync?: boolean
     /** Upload path: do not skip just because pdf.js left textChunks */
@@ -774,6 +800,8 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
   constructionCrossDir: 1 as 1 | -1,
   commentLayerExpanded: false,
   settlementSphereEpoch: 0,
+  letterWorkbenchMode: false,
+  sphereAuditOpen: false,
   suppressCameraOrbit: false,
   tetraAnchorLinkId: null,
   tetraCandidateDId: null,
@@ -1738,6 +1766,9 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
   applyUploadedUniverse: (data) => {
     if (uploadedBuilt) revokeBlobPages(uploadedBuilt.pages)
     uploadedBuilt = data
+    if (data.letterWorkbench !== true) {
+      clearPageImageVault()
+    }
     // Fresh import: always start with empty annotations (ignore prior localStorage for this label).
     const list = connectionsForStrand([], 0)
     const cur = list[0]
@@ -1803,10 +1834,12 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
       })(),
       ocrOpen: false,
       ocrActiveStrand: null,
-      ocrByStrand: {},
+      ocrByStrand: data.ocrByStrand ?? {},
       ocrHoverBlock: null,
       ocrEditingBlockId: null,
       ocrInlineEdit: false,
+      letterWorkbenchMode: data.letterWorkbench === true,
+      sphereAuditOpen: false,
     })
     saveEmphasisState(
       emphasisStorageKey('upload', data.label),
@@ -1818,7 +1851,109 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
     void import('../reasoning/closureStore').then(({ useReasoning }) => {
       useReasoning.getState().clearActive()
     })
-    triggerSwoop(set, get)
+    if (data.letterWorkbench !== true) {
+      triggerSwoop(set, get)
+    }
+  },
+
+  mergeIngestPage: (page, ocr) => {
+    const strand = page.strandIndex
+    set((s) => {
+      const pages = s.pages.slice()
+      const idx = pages.findIndex((p) => p.strandIndex === strand)
+      if (idx >= 0) {
+        const prev = pages[idx]!
+        if (prev.imageUrl?.startsWith('blob:') && prev.imageUrl !== page.imageUrl) {
+          try {
+            URL.revokeObjectURL(prev.imageUrl)
+          } catch {
+            /* ignore */
+          }
+        }
+        pages[idx] = page
+      } else {
+        pages.push(page)
+        pages.sort((a, b) => a.strandIndex - b.strandIndex)
+      }
+      return {
+        pages,
+        ocrByStrand: { ...s.ocrByStrand, [strand]: ocr },
+      }
+    })
+  },
+
+  setLetterWorkbenchMode: (on) =>
+    set({
+      letterWorkbenchMode: on,
+      sphereAuditOpen: on ? get().sphereAuditOpen : false,
+    }),
+
+  revealSphereForAudit: () => set({ sphereAuditOpen: true }),
+
+  hideSphereAfterAudit: () => {
+    if (get().letterWorkbenchMode) {
+      set({ sphereAuditOpen: false })
+    }
+  },
+
+  ensurePageForAudit: async (strandIndex, opts) => {
+    const focus = opts?.focus !== false
+    const page = get().pages.find((p) => p.strandIndex === strandIndex)
+    if (!page) {
+      return { ok: false, note: `无 strand=${strandIndex} 页壳` }
+    }
+    if (page.imageUrl) {
+      if (focus) {
+        set({ sphereAuditOpen: true, currentStrand: strandIndex })
+      } else {
+        set({ sphereAuditOpen: true })
+      }
+      return { ok: true, note: '页图已在内存' }
+    }
+    const { materializePageImageFromVault } = await import(
+      '../data/pageImageVault'
+    )
+    // 并行物化：再次读最新页态，避免两路互相覆盖
+    const latest = get().pages.find((p) => p.strandIndex === strandIndex)
+    if (latest?.imageUrl) {
+      if (focus) {
+        set({ sphereAuditOpen: true, currentStrand: strandIndex })
+      } else {
+        set({ sphereAuditOpen: true })
+      }
+      return { ok: true, note: '页图已在内存' }
+    }
+    const mat = materializePageImageFromVault(strandIndex)
+    if (!mat.ok) {
+      if (focus) {
+        set({ sphereAuditOpen: true, currentStrand: strandIndex })
+      } else {
+        set({ sphereAuditOpen: true })
+      }
+      return { ok: false, note: mat.note }
+    }
+    set((s) => {
+      const prev = s.pages.find((p) => p.strandIndex === strandIndex)
+      const prevUrl = prev?.imageUrl
+      if (prevUrl?.startsWith('blob:') && prevUrl !== mat.imageUrl) {
+        try {
+          URL.revokeObjectURL(prevUrl)
+        } catch {
+          /* ignore */
+        }
+      }
+      return {
+        pages: s.pages.map((p) =>
+          p.strandIndex === strandIndex
+            ? { ...p, imageUrl: mat.imageUrl }
+            : p,
+        ),
+        sphereAuditOpen: true,
+        ...(focus ? { currentStrand: strandIndex } : {}),
+        settlementSphereEpoch: s.settlementSphereEpoch + 1,
+      }
+    })
+    return { ok: true, note: `已物化 strand=${strandIndex} 页图` }
   },
 
   clearWorkspaceAnnotations: () => {
@@ -2526,6 +2661,7 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
   runOcrOnPagesLackingText: async (opts) => {
     const { pages, ocrByStrand } = get()
     const maxPages = opts?.maxPages ?? 40
+    const concurrency = Math.max(1, opts?.concurrency ?? 3)
     const forceEvenIfPdfText = opts?.forceEvenIfPdfText === true
     const targets = pages
       .filter((p) => {
@@ -2550,13 +2686,17 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
       ocrActiveStrand: targets[0].strandIndex,
     })
 
+    const { runBatchesParallel } = await import('../arch/parallelLlmBatch')
     let done = 0
     let failed = 0
+    let finished = 0
     const succeededPages: number[] = []
-    for (const page of targets) {
-      if (!page.imageUrl) continue
-      opts?.onProgress?.(done + failed, targets.length, page.strandIndex)
-      try {
+
+    await runBatchesParallel({
+      batches: targets,
+      concurrency,
+      run: async (page) => {
+        if (!page.imageUrl) throw new Error('无图像')
         const dataUri = await imageUrlToDataUri(page.imageUrl)
         const docId = indexDocIdFromStore(get())
         const result = await emitPageViaProtocol({
@@ -2574,6 +2714,8 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
         })
         done += 1
         succeededPages.push(page.strandIndex)
+        finished += 1
+        opts?.onProgress?.(finished, targets.length, page.strandIndex)
         pushPipeline(get, set, {
           kind: 'ocr',
           actor: 'system',
@@ -2585,15 +2727,27 @@ export const useDocuverse = create<DocuverseState>((set, get) => ({
             via: 'protocol/emit-page',
           },
         })
-      } catch (e) {
+        return result
+      },
+    }).then((parallel) => {
+      for (const r of parallel.results) {
+        if (r.ok) continue
         failed += 1
-        const msg = e instanceof Error ? e.message : 'OCR 失败'
-        set({ ocrError: `页 s${page.strandIndex}: ${msg}` })
+        finished += 1
+        const strand = targets[r.index]?.strandIndex ?? r.index
+        opts?.onProgress?.(finished, targets.length, strand)
+        set({
+          ocrError: `页 s${strand}: ${r.aborted ? '已取消' : r.note}`,
+        })
       }
-    }
+    })
 
     set({ ocrBusy: false })
-    opts?.onProgress?.(targets.length, targets.length, targets[targets.length - 1].strandIndex)
+    opts?.onProgress?.(
+      targets.length,
+      targets.length,
+      targets[targets.length - 1].strandIndex,
+    )
 
     if (!opts?.deferIndexSync && succeededPages.length > 0) {
       try {

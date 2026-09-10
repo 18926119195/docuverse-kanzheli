@@ -17,7 +17,7 @@ import {
   PEEK_HOT_INSTRUCTION_SUFFIX,
   PEEK_USER_ASIDE_HINT,
 } from './peekInstruction'
-import { rollDoorBrief } from './keyDecisionState'
+import { rollDoorBrief, type PeekHangMode } from './keyDecisionState'
 import {
   normalizeIncrementStatus,
   type IncrementReadStatus,
@@ -28,8 +28,6 @@ import {
   chunkKeys,
   runBatchesParallel,
 } from '../arch/parallelLlmBatch'
-
-const MAX_ITEMS = 12
 
 export type A1DsItem = {
   /** bookKey（A1 门牌） */
@@ -132,7 +130,6 @@ function salvageBriefSlotsFromText(
       brief,
       rationale: (m[3] ?? '').replace(/\\"/g, '"').trim(),
     })
-    if (items.length >= MAX_ITEMS) break
   }
   return items
 }
@@ -147,7 +144,6 @@ function pushPeekSlots(
   },
 ) {
   if (!input.key || !input.brief.trim()) return
-  if (items.length >= MAX_ITEMS) return
   items.push({
     key: input.key,
     brief: input.brief.trim(),
@@ -204,7 +200,6 @@ function collectBriefSlotsFromParsed(
               rowStatus,
           })
         }
-        if (items.length >= MAX_ITEMS) break
       }
       return
     }
@@ -224,7 +219,6 @@ function collectBriefSlotsFromParsed(
     for (const row of parsed.briefs) {
       if (!row || typeof row !== 'object') continue
       ingestRow(row as Record<string, unknown>)
-      if (items.length >= MAX_ITEMS) break
     }
   }
 
@@ -287,35 +281,50 @@ export function settlePeekItemsFromLlm(input: {
   docId: string
   llmText: string
   allowedBookKeys: ReadonlyArray<string>
+  /** 同一次 peek 母族；缺省本函数内现铸一次 */
+  peekFamilyId?: string
+  hangMode?: PeekHangMode
 }): { items: A1DsItem[]; note: string; skipped: number } {
   const allowed = new Set(input.allowedBookKeys)
   const parsed = parseFlashResponse(input.llmText, allowed)
+  const peekFamilyId =
+    input.peekFamilyId?.trim() ||
+    `desk_peek_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+  const hangMode = input.hangMode ?? 'revise'
   const hung: A1DsItem[] = []
   let skipped = 0
+  let blocked = 0
   for (const it of parsed.items) {
     if (!statusAllowsMint(it.status)) {
       skipped++
       continue
     }
-    const entry = rollDoorBrief({
+    const rolled = rollDoorBrief({
       docId: input.docId,
       key: it.key,
       decisionBrief: it.brief,
       suggestAction: 'open',
-      taskId: `desk_peek_${Date.now().toString(36)}`,
+      peekFamilyId,
+      taskId: peekFamilyId,
+      hangMode,
     })
-    hung.push({ ...it, briefKey: entry.briefKey })
+    if (!rolled.ok) {
+      blocked++
+      continue
+    }
+    hung.push({ ...it, briefKey: rolled.entry.briefKey })
   }
   return {
     items: hung,
-    skipped,
+    skipped: skipped + blocked,
     note:
       hung.length > 0
         ? `peek 落账 briefKey×${hung.length}` +
           (skipped ? ` · 非充分跳过×${skipped}` : '') +
+          (blocked ? ` · 异族/重复挡×${blocked}` : '') +
           (parsed.recovered ? ' · 已修复JSON' : '')
-        : skipped > 0
-          ? `peek 无充分槽（跳过×${skipped}）`
+        : skipped + blocked > 0
+          ? `peek 无充分槽（跳过×${skipped} · 挡×${blocked}）`
           : 'peek 无有效输出槽',
   }
 }
@@ -503,7 +512,7 @@ export async function askDeepSeekWithA1(input: {
 
   const opened = new Set(input.openedKeys ?? [])
 
-  /** 冷启：多 KEY/批 + 多批真并行；key 去重；凑够 MAX_ITEMS 则 abort 其余 */
+  /** 冷启：多 KEY/批 + 多批真并行；骨架批全部跑完（peek 前置，不因 brief 数早停） */
   const COLD_BATCH = 36
   const COLD_CONCURRENCY = 3
   const uniqueRows = (() => {
@@ -547,6 +556,16 @@ export async function askDeepSeekWithA1(input: {
   ): Promise<BatchPeekResult> => {
     const batch = batches[bi]!
     const allowedBatch = new Set(batch.map((r) => r.key))
+
+    // 本批入窗 bookKey → 与本批 peek LLM 并行物化页图（不等结算）
+    void import('./prefetchBookPages').then(({ prefetchPagesForBookKeys }) => {
+      void prefetchPagesForBookKeys({
+        bookKeys: batch.map((r) => r.key),
+        bookIndex: input.bookIndex,
+        onProgress: input.onProgress,
+      })
+    })
+
     const system = [
       a1DsPromptRules(),
       peekInstruction,
@@ -608,6 +627,9 @@ export async function askDeepSeekWithA1(input: {
       queryKey: input.queryKey,
     })
 
+    const peekFamilyId = `a1chat_${peekMode}_${Date.now().toString(36)}_${bi}_${Math.random().toString(36).slice(2, 6)}`
+    const hangMode = peekMode === 'hot' ? 'revise' : 'sibling'
+
     const items: A1DsItem[] = []
     let skipped = 0
     for (const it of parsed.items) {
@@ -615,14 +637,20 @@ export async function askDeepSeekWithA1(input: {
         skipped++
         continue
       }
-      const entry = rollDoorBrief({
+      const rolled = rollDoorBrief({
         docId: input.bookIndex.docId,
         key: it.key,
         decisionBrief: it.brief,
         suggestAction: 'open',
-        taskId: `a1chat_${Date.now().toString(36)}_${bi}`,
+        peekFamilyId,
+        taskId: peekFamilyId,
+        hangMode,
       })
-      items.push({ ...it, briefKey: entry.briefKey })
+      if (!rolled.ok) {
+        skipped++
+        continue
+      }
+      items.push({ ...it, briefKey: rolled.entry.briefKey })
     }
 
     return {
@@ -636,17 +664,16 @@ export async function askDeepSeekWithA1(input: {
     }
   }
 
-  /** 真并行 + 凑够 MAX_ITEMS 则 abort 未完成批 */
+  /** 真并行扫完入窗 KEY；peek 不作 decide 式「够了就停」 */
   const hung: A1DsItem[] = []
   let skipped = 0
   let recoveredAny = false
   let lastAnswer = ''
   let firstFailNote = ''
-  let mintableSoFar = 0
 
   if (batches.length > 1) {
     input.onProgress?.(
-      `冷启 peek · 真并行 ${batches.length} 批 · 并发≤${COLD_CONCURRENCY}…`,
+      `冷启 peek · 真并行 ${batches.length} 批 · 并发≤${COLD_CONCURRENCY}（扫完骨架，不早停）…`,
     )
   }
 
@@ -654,11 +681,6 @@ export async function askDeepSeekWithA1(input: {
     batches: batches.map((_, bi) => bi),
     concurrency: COLD_CONCURRENCY,
     run: (bi, _index, signal) => runOneBatch(bi, signal),
-    shouldStop: (r) => {
-      if (!r.ok) return false
-      mintableSoFar += r.items.length
-      return mintableSoFar >= MAX_ITEMS
-    },
   })
 
   const waveResults = parallel.results
@@ -686,9 +708,8 @@ export async function askDeepSeekWithA1(input: {
     if (r.answer) lastAnswer = r.answer
     skipped += r.skipped
     for (const it of r.items) {
-      if (hung.length >= MAX_ITEMS) break
-      // 跨批书序 key 去重
-      if (hung.some((h) => h.key === it.key)) continue
+      // 跨批仅去重同门同贴；同门多贴保留
+      if (hung.some((h) => h.key === it.key && h.brief === it.brief)) continue
       hung.push(it)
     }
     if (r.refused) {
@@ -720,9 +741,8 @@ export async function askDeepSeekWithA1(input: {
     hung.length > 0
       ? `${recoveredAny ? '已从破损 JSON 捞回 · ' : ''}${peekMode === 'hot' ? '热启' : '冷启'}已铸 ${hung.length} 条门贴并挂靠 bookKey` +
         (skipped ? ` · 非充分跳过×${skipped}` : '') +
-        ` · 表 ${uniqueRows.length} 行 · 并行扫 ${packsScanned} 批` +
-        (parallel.stoppedEarly ? ' · 早停取消其余' : '')
-      : `未得到充分 brief · ${peekMode === 'hot' ? '热启区间' : '整表'} ${uniqueRows.length} 行 · 并行扫 ${packsScanned} 批` +
+        ` · 表 ${uniqueRows.length} 行 · 并行扫 ${packsScanned}/${batches.length} 批`
+      : `未得到充分 brief · ${peekMode === 'hot' ? '热启区间' : '整表'} ${uniqueRows.length} 行 · 并行扫 ${packsScanned}/${batches.length} 批` +
         (skipped ? ` · 非充分跳过×${skipped}` : '') +
         (lastAnswer ? ` · 模型：${lastAnswer.slice(0, 80)}` : '')
 

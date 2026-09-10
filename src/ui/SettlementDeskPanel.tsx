@@ -71,7 +71,7 @@ export function SettlementDeskPanel() {
     if (!bookIndex || bookKeys.length === 0) return
     const first = bookKeys[0]!
     setActiveBook(first)
-    enterSettlementSingleAnchor({
+    void enterSettlementSingleAnchor({
       kind: mode,
       bookKey: first,
       bookIndex,
@@ -89,7 +89,7 @@ export function SettlementDeskPanel() {
   const onPickBook = (bk: string) => {
     if (!bookIndex) return
     setActiveBook(bk)
-    settlementSelectBookKey({ bookKey: bk, bookIndex })
+    void settlementSelectBookKey({ bookKey: bk, bookIndex })
   }
 
   const onApproveReuse = () => {

@@ -54,6 +54,35 @@ body.emphasize-pen-on .workbench-root * {
   z-index: 0;
 }
 
+.app-root--letter-workbench .stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.letter-workbench-stage {
+  max-width: 36rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: var(--ink);
+}
+
+.letter-workbench-title {
+  font-family: var(--display);
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.75rem;
+  color: var(--cyan);
+}
+
+.letter-workbench-sub {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
 .hud {
   position: absolute;
   z-index: 10;

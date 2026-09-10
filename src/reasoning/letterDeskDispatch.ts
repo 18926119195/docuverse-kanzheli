@@ -1297,6 +1297,22 @@ export async function dispatchLetterDesk(input: {
       continue
     }
 
+    // peek / infer / supervise：入窗 bookKey 即并行物化页图（与 LLM 并行，不等结算）
+    if (pkg.job === 'peek' || pkg.job === 'infer' || pkg.job === 'supervise') {
+      const bookKeysIn = keys
+        .filter((k) => k.kind === 'bookKey')
+        .map((k) => k.key)
+      if (bookKeysIn.length > 0) {
+        void import('./prefetchBookPages').then(({ prefetchPagesForBookKeys }) => {
+          void prefetchPagesForBookKeys({
+            bookKeys: bookKeysIn,
+            bookIndex: input.bookIndex,
+            onProgress: input.onProgress,
+          })
+        })
+      }
+    }
+
     if (pkg.job === 'infer') {
       // infer；reuse 在前；再开时必排本问族已有 ι（狭义推理记忆，≠ reuse）
       const { priorInferKeysForQuery } = await import('./superviseCritique')
@@ -1632,6 +1648,8 @@ export async function dispatchLetterDesk(input: {
           docId: input.docId,
           llmText: chat.content,
           allowedBookKeys: bookKeys,
+          peekFamilyId: peekCallId,
+          hangMode: 'revise',
         })
         notes.push(peekSettled.note)
         parts.push(

@@ -236,6 +236,15 @@ function pageAtoms(
     }
   }
 
+  // 后台 stub（无图、无 OCR）：禁止铸假门，等 syncPages 真 OCR 再入账
+  if (
+    !ocr &&
+    !hasPageImage &&
+    (page.title.includes('后台识别中') || page.title.includes('缺失'))
+  ) {
+    return null
+  }
+
   const weak = paragraphsAsChunks(page)
   const derived = structureChunkBlocks(weak)
   if (derived.length === 0) return null

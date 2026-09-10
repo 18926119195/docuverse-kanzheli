@@ -186,14 +186,36 @@ export function executePeekCast(input: {
     warnings.push(`黄灯·丢弃非递交 key: ${gReturn.dropped.join(',')}`)
   }
 
-  const entry = rollDoorBrief({
+  const peekFamilyId =
+    peekIn.taskId?.trim() ||
+    `peekcast_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+  const rolled = rollDoorBrief({
     docId: input.docId,
     key: peekIn.key,
     decisionBrief: brief,
     suggestAction,
-    taskId: peekIn.taskId,
+    peekFamilyId,
+    taskId: peekFamilyId,
+    hangMode: 'sibling',
     actionId: newActionId('peek'),
   })
+  if (!rolled.ok) {
+    return {
+      ok: false,
+      verdict: 'V4_unapproved',
+      fails: [
+        {
+          code: 'G5_SCHEMA',
+          message: rolled.note,
+        },
+      ],
+      warnings,
+      action: makeAction(peekIn, null, 'V4_unapproved', [
+        { code: 'G5_SCHEMA', message: rolled.note },
+      ]),
+    }
+  }
+  const entry = rolled.entry
 
   const action = makeAction(
     peekIn,

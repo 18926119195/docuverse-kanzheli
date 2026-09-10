@@ -126,7 +126,7 @@ export function TocWizard() {
     if (!r.ok) setErr(r.error || '确认失败')
   }
 
-  const thumbLimit = Math.min(pages.length, 80)
+  const thumbLimit = pages.length
 
   return (
     <div className="toc-wizard-backdrop" role="dialog" aria-modal="true">
@@ -313,7 +313,7 @@ export function TocWizard() {
         {step === 'preview' && (
           <section className="toc-wizard-body">
             <p className="toc-wizard-p">
-              确认后将按 strand 闭集 ∩ A1 写入各节 memberKeys，供冷启每节头尾 15%。
+              确认后按 strand 闭集写 pageRange；memberKeys = 页界 ∩ 当前 A1，后续中间页 sync / 语料包导入会自动回填。
             </p>
             <ul className="toc-preview-list">
               {previewRows.map((r) => (

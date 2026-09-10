@@ -234,6 +234,7 @@ export {
   sectionHitNote,
   semanticTocReady,
   confirmTocSections,
+  reconcileTocMemberKeys,
   buildSemanticFromTocEntries,
 } from './semanticIndex'
 export type {
@@ -277,8 +278,14 @@ export {
   rollDoorBrief,
   getDoorEntry,
   briefContentHash,
+  doorPeekFamilies,
 } from './keyDecisionState'
-export type { KeyDecisionEntry, SuggestAction } from './keyDecisionState'
+export type {
+  KeyDecisionEntry,
+  SuggestAction,
+  PeekHangMode,
+  RollDoorBriefResult,
+} from './keyDecisionState'
 export {
   gateBagSubset,
   gateReturnSubset,

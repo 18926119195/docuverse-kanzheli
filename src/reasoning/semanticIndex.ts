@@ -17,7 +17,7 @@ export interface SectionNode {
   page: number
   /** Inclusive page span for TOC shrink (pageRange ∩ A1 → memberKeys) */
   pageRange?: { startPage: number; endPage: number }
-  /** Keys belonging to this corridor (filled at build / confirm) */
+  /** Keys belonging to this corridor（pageRange ∩ A1；确认后随 sync/hydrate 回填） */
   memberKeys?: string[]
   title: string
   summary: string
@@ -275,6 +275,86 @@ export function confirmTocSections(
     provenance,
     tocConfirmed: true,
     tocSkipped: false,
+    builtAt: Date.now(),
+  }
+}
+
+/**
+ * 已确认 TOC：用各节 pageRange ∩ 当前 A1 重算 memberKeys（不改标题/页界）。
+ * 目录确认后中间页 sync、以及语料包 hydrate 时调用，把后到的 bookKey 补进对应章。
+ */
+export function reconcileTocMemberKeys(
+  semantic: BookSemanticIndex,
+  bookIndex: BookIndex,
+): BookSemanticIndex {
+  if (
+    !semantic.tocConfirmed ||
+    semantic.tocSkipped ||
+    semantic.docId !== bookIndex.docId ||
+    semantic.sections.length === 0
+  ) {
+    return semantic
+  }
+
+  const byPage = new Map<number, string[]>()
+  for (const c of bookIndex.chunks) {
+    const list = byPage.get(c.page) ?? []
+    list.push(c.key)
+    byPage.set(c.page, list)
+  }
+
+  const claimed = new Set<string>()
+  const memberByNode = new Map<string, string[]>()
+  const ordered = [...semantic.sections].sort((a, b) => a.ord - b.ord)
+  for (const sec of ordered) {
+    const pageRange = sec.pageRange ?? {
+      startPage: sec.page,
+      endPage: sec.page,
+    }
+    const startPage = Math.min(pageRange.startPage, pageRange.endPage)
+    const endPage = Math.max(pageRange.startPage, pageRange.endPage)
+    const memberKeys: string[] = []
+    for (let p = startPage; p <= endPage; p++) {
+      for (const k of byPage.get(p) ?? []) {
+        if (claimed.has(k)) continue
+        claimed.add(k)
+        memberKeys.push(k)
+      }
+    }
+    memberByNode.set(sec.nodeId, memberKeys)
+  }
+
+  const sections = semantic.sections.map((sec) => {
+    const pageRange = sec.pageRange ?? {
+      startPage: sec.page,
+      endPage: sec.page,
+    }
+    const startPage = Math.min(pageRange.startPage, pageRange.endPage)
+    const endPage = Math.max(pageRange.startPage, pageRange.endPage)
+    const memberKeys = memberByNode.get(sec.nodeId) ?? []
+    return {
+      ...sec,
+      pageRange: { startPage, endPage },
+      memberKeys,
+      summary: `strand ${startPage}–${endPage} · 机器牌 ${startPage + 1}–${endPage + 1} · ${memberKeys.length} keys`,
+    }
+  })
+
+  const provenance: SlotProvenance[] = []
+  for (const sec of sections) {
+    for (const k of sec.memberKeys ?? []) {
+      provenance.push({
+        key: k,
+        primaryNodeId: sec.nodeId,
+        role: 'body',
+      })
+    }
+  }
+
+  return {
+    ...semantic,
+    sections,
+    provenance,
     builtAt: Date.now(),
   }
 }
