@@ -1,0 +1,7 @@
+﻿私有库（看这里）
+https://github.com/18926119195/docuverse-kanzheli
+
+本地路径：
+C:\Users\Administrator\Desktop\看这里
+
+以后直接打开桌面上的「看这里」文件夹即可。
