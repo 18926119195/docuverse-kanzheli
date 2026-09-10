@@ -19,12 +19,14 @@ Cursor agent transcripts for Docuverse（「看这里」快照）。
 | `2026-09-08-thinking-full-off-measured.md` | `又一次新的chat` **仅增量** | 半关→全关实测：全关更省更稳；infer 开 thinking 易空 content |
 | `2026-09-09-path-lineage-supervise-norm.jsonl` | `26025a7c-77f3-4b8b-98b3-b8dab820ea9f` | 评论层机位/球壳；path=同窝信效度非配对；decide→infer 血缘闭关；候选 pathKey→tick/监督铸 normKey；reuse 吃 norm；thinking 全关核实；明日 UI：复用批撤 vs path 确认 |
 | `2026-09-10-settlement-ui-toc-map-399aab3e.jsonl` | `399aab3e-9a61-43b3-b267-2c937ac243fa` | 三态按本问族；seedRange 半开/闭集化；decide 并行早停；结算面复用批撤+path tick；C 固定单锚转球；toc_map 目录分节（strand） |
+| `2026-09-10-deepseek-kv-vs-docuverse-architecture-ea8633ff.jsonl` | `ea8633ff-1e48-425e-a4ad-50a5fd7e3212` | DeepSeek KV/CSA/SWA 与 Docuverse settle/reuse/压滚对照；path 地址 vs 潜空间 id↔记忆；零 context 堆叠接续哲学 |
 
 权威依据（架构）：`2026-09-03-architecture-align.jsonl` + 本仓库现码。  
 今日原文另见根目录 `聊天记录-今日原文/`；完整导出亦入库 `2026-09-08-bookkey-definition-inquiry-full.ini`。  
 `又一次新的chat` 含多份 BookKey 全文重复粘贴，**不入库**；只归档其 thinking 实测增量。
 原文副本：`聊天记录-今日原文/2026-09-09-path-lineage-supervise-norm-26025a7c.jsonl`；  
-`聊天记录-今日原文/2026-09-10-settlement-ui-toc-map-399aab3e.jsonl`。
+`聊天记录-今日原文/2026-09-10-settlement-ui-toc-map-399aab3e.jsonl`；  
+`聊天记录-今日原文/2026-09-10-deepseek-kv-vs-docuverse-architecture-ea8633ff.jsonl`。
 
 ## 2026-09-08 落地摘要
 
