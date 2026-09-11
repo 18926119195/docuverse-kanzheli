@@ -7,7 +7,7 @@
  */
 
 import { useAttentionIo } from '../reasoning/attentionIoStore'
-import { docHasAnyBrief } from '../reasoning/masterTableMap'
+import { needsColdBookSkeleton } from './noPeekExperiment'
 
 /** 问线分叉：复用前置 vs 新铸（结算两路的上游） */
 export type AskLineBranch =
@@ -23,9 +23,9 @@ export type AutoEntryBranch =
   | { kind: 'stageA_then_brief' }
   | { kind: 'brief_skip_A' }
 
-/** 材料层：库内尚无任何 brief → 需冷启前置（≠ 结算路） */
+/** 材料层：实验 → 无 prospect 时注入骨架 bookKey（不再 peek LLM） */
 export function needsColdPeekPrecondition(docId: string): boolean {
-  return !docHasAnyBrief(docId)
+  return needsColdBookSkeleton(docId)
 }
 
 /**
