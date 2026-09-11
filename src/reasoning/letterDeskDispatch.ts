@@ -354,22 +354,23 @@ export function expandSeedsForJob(input: {
     }
 
     if (input.job === 'decide') {
-      const briefKeys: string[] = []
-      if (seed.onlyBriefKeys && seed.onlyBriefKeys.length > 0) {
-        briefKeys.push(...seed.onlyBriefKeys)
+      // 实验：decide 队列是 bookKey
+      const books: string[] = []
+      if (seed.onlyBookKeys && seed.onlyBookKeys.length > 0) {
+        books.push(...seed.onlyBookKeys)
+      } else if (seed.onlyBriefKeys && seed.onlyBriefKeys.length > 0) {
+        // 兼容：onlyBriefKeys 在本分支语义=bookKey 队列
+        books.push(...seed.onlyBriefKeys)
       } else {
-        if (seed.briefKey) briefKeys.push(seed.briefKey)
-        else if (seed.bookKey) {
-          const head = mapBookToHeadBrief(input.docId, seed.bookKey)
-          if (head) briefKeys.push(head.briefKey)
+        if (seed.bookKey) books.push(seed.bookKey)
+        if (seed.briefKey && !seed.briefKey.startsWith('bh_')) {
+          books.push(seed.briefKey)
         }
-        const hist = io.listBriefKeysForQuestion(seed.question)
-        briefKeys.push(...hist)
-        // unread / insufficient from 本问族 prior decide → 必须再进窗
-        briefKeys.push(...io.listKeysUnread('decide', qScope))
-        briefKeys.push(...io.listKeysNeedingMore('decide', qScope))
+        books.push(...io.listKeysUnread('decide', qScope))
+        books.push(...io.listKeysNeedingMore('decide', qScope))
+        books.push(...io.listBookKeysForQuestion(seed.question))
       }
-      preferByStatus('briefKey', [...new Set(briefKeys)])
+      preferByStatus('bookKey', [...new Set(books)])
       continue
     }
 
@@ -481,31 +482,31 @@ export function assembleWindow(input: {
     if (input.decideCritiqueHint?.trim()) {
       lines.push(input.decideCritiqueHint.trim(), '')
     }
-    lines.push('【brief 窗 · 仅 briefKey+brief】')
-    for (const k of input.keys.filter((x) => x.kind === 'briefKey')) {
-      const brief = fetchBriefText(input.docId, k.key)
-      lines.push(`briefKey=\`${k.key}\`\nbrief:\n${brief}\n`)
+    lines.push(
+      '【实验·无 peek】decide 直读 book+T；prospect 父门=bookKey（JSON 可用 bookKey 或 briefKey 字段回传同一门牌）',
+    )
+    for (const k of input.keys.filter((x) => x.kind === 'bookKey')) {
+      const T = fetchBookT(input.bookIndex, k.key).slice(0, 1200)
+      lines.push(`bookKey=\`${k.key}\`\nT:\n${T}\n`)
     }
     lines.push(
       '请只输出 JSON（可围栏）：\n' +
         '{\n' +
-        '  "prospects": [{ "briefKey": "bh_…", "prospect": "单行≤40字：该 brief 解 Q_now 的一种可能", "status": "sufficient" }],\n' +
-        '  "keyStatuses": [{ "key": "bh_…", "status": "unread|sufficient|insufficient" }],\n' +
-        '  "stopReason": null | "peek" | "token_full" | "off_book",\n' +
-        '  "seedRange": null | { "from":"bh_…","to":"bh_…" } | { "from":"-inf","to":"bh_…" } | { "from":"bh_…","to":"+inf" } | { "kind":"open_low","to":"bh_…" } | { "kind":"open_high","from":"bh_…" }\n' +
+        '  "prospects": [{ "bookKey": "门牌…", "prospect": "单行≤40字：该原文解 Q_now 的一种可能", "status": "sufficient" }],\n' +
+        '  "keyStatuses": [{ "key": "门牌…", "status": "unread|sufficient|insufficient" }],\n' +
+        '  "stopReason": null | "peek" | "expand" | "token_full" | "off_book",\n' +
+        '  "seedRange": null | { "from":"book…","to":"book…" } | { "from":"-inf","to":"book…" } | { "from":"book…","to":"+inf" }\n' +
         '}\n' +
         '硬规则：\n' +
-        '- 调度只看 key 三态；不要输出整窗 coverage；不要输出 keep[]（已废除）。\n' +
-        '- 仅 status=sufficient 的槽才会被台铸 prospectKey；unread/insufficient 只记状态，不铸键。\n' +
-        '- 未处理完的 brief → status:unread（台续滚）；已读但不够 → insufficient（可写 seedRange 草案；台晚执行）。\n' +
-        '- seedRange 可早写半开（−∞/＋∞）；锚点 brief 必须本窗已读（非 unread）。台合并并行草案成闭集后才热启 peek；未配成闭集不 peek。\n' +
-        '- 一槽一 prospectKey：多种可能 = 多行 prospects，或同行内嵌数组；禁止合并成一条。\n' +
-        '- briefKey 必须字符级回传窗内门牌。\n' +
-        '- prospect 必须单行、≤40字；禁止换行；字符串内禁止英文双引号；提到专名则原样保留（如 Lacan/拉康）。\n' +
-        '- 只要 brief 正文出现与 Q 相关的专名/概念，status 必须 sufficient，prospect 写清「提到X…」；未出现才写「否：未提到」。\n' +
-        `- ${keyStatusContractHint('briefKey')}\n` +
-        '- 窗内每个 briefKey 都必须出现在 prospects.status 或 keyStatuses 里。\n' +
-        '- 优先保证 JSON 完整可解析；写不完就停在完整对象后，勿截断字符串。',
+        '- 调度只看 key 三态；不要输出整窗 coverage；不要输出 keep[]。\n' +
+        '- 仅 status=sufficient 的槽才会被台铸 prospectKey（父=bookKey）；unread/insufficient 只记状态。\n' +
+        '- 未处理完 → unread（台续滚）；已读但不够 → insufficient（可写 seedRange；台合并闭集后把书序 book 并入下一轮 decide，不再 peek）。\n' +
+        '- seedRange 端点必须是本窗 bookKey（可半开）；锚点须已读。\n' +
+        '- 一槽一 prospectKey：多种可能 = 多行；bookKey/briefKey 字段须字符级回传窗内门牌。\n' +
+        '- prospect 必须单行、≤40字；禁止换行；字符串内禁止英文双引号。\n' +
+        `- ${keyStatusContractHint('bookKey')}\n` +
+        '- 窗内每个 bookKey 都必须出现在 prospects.status 或 keyStatuses 里。\n' +
+        '- 优先保证 JSON 完整可解析。',
     )
   } else if (input.job === 'peek') {
     lines.push('【peek 铸贴窗】')
@@ -1476,7 +1477,7 @@ export async function dispatchLetterDesk(input: {
         )
         const decideOut = parseDecideOutcome(chat.content)
         const allowed = keys
-          .filter((k) => k.kind === 'briefKey')
+          .filter((k) => k.kind === 'bookKey' || k.kind === 'briefKey')
           .map((k) => k.key)
         const avoid = pkg.avoidProspectTexts ?? []
         let keeps = decideOut.keeps

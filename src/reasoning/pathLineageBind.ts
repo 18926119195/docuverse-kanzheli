@@ -24,9 +24,11 @@ export interface LineageBoundPair {
 }
 
 /**
- * briefKey → bookKey：
- * 1) 门表 mapBriefToBook
- * 2) 台递送边 peek：book ──► brief（门表丢了也能溯）
+ * 材料父键 → bookKey（实验：父键常已是 bookKey）：
+ * 1) 门表 mapBriefToBook（旧 brief）
+ * 2) decide 递送：from book → to prospect
+ * 3) peek 递送：from book → to brief
+ * 4) 启发式：非 bh_/st_ 前缀则当作裸 bookKey
  */
 export function resolveBriefBookKey(
   docId: string,
@@ -35,21 +37,27 @@ export function resolveBriefBookKey(
 ): string | null {
   const bk = briefKey.trim()
   if (!bk) return null
+
   const hit = mapBriefToBook(docId, bk)?.bookKey?.trim()
   if (hit) return hit
 
-  if (!deskDeliveries?.length) return null
-  for (let i = deskDeliveries.length - 1; i >= 0; i--) {
-    const d = deskDeliveries[i]!
-    if (d.toKey !== bk) continue
-    if (d.job === 'peek' && d.fromKeys[0]) {
-      return d.fromKeys[0]!.trim() || null
+  if (deskDeliveries?.length) {
+    for (let i = deskDeliveries.length - 1; i >= 0; i--) {
+      const d = deskDeliveries[i]!
+      if (d.toKey === bk && d.fromKeys[0]) {
+        if (d.job === 'decide' || d.job === 'peek') {
+          return d.fromKeys[0]!.trim() || null
+        }
+      }
     }
   }
+
+  // 实验：prospect.briefKey 字段直接存 bookKey
+  if (!bk.startsWith('bh_') && !bk.startsWith('st_')) return bk
   return null
 }
 
-/** prospect.briefKey → bookKey（无表/无递送则 null） */
+/** prospect.briefKey → bookKey（实验分支：briefKey 字段 = book 父门） */
 export function prospectBookKey(
   docId: string,
   prospect: Pick<ProspectRecord, 'briefKey'>,

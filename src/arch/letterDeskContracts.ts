@@ -52,16 +52,18 @@ export const DESK_CONTRACTS: Record<DeskJob, DeskContract> = {
   },
   decide: {
     job: 'decide',
-    allow: ['briefKey'],
-    forbid: ['bookKey'],
-    inNote: 'Q_now + {briefKey, brief}[]（无 bookKey/T）',
+    /** 实验：直读 book；prospect 父门=bookKey（落账字段仍写 briefKey） */
+    allow: ['bookKey'],
+    forbid: ['briefKey'],
+    inNote:
+      '【实验·无 peek】Q_now + {bookKey, T}[]；prospect 挂 book（字段名 briefKey:=bookKey）',
     outNote:
-      'prospects[{briefKey, prospect|prospects[], status}] + keyStatuses；' +
-      'briefKey 须字符级回传窗内门牌；多种可能=多槽各 settle；' +
-      '仅 sufficient 铸 prospectKey；unread/insufficient 只记状态；' +
-      '整窗 coverage 已废；可选 stopReason/seedRange 草案（可半开）；' +
-      '台晚执行：锚点须已读、半开配对成闭集后才热启 peek；' +
-      keyStatusContractHint('briefKey'),
+      'prospects[{bookKey|briefKey, prospect|prospects[], status}] + keyStatuses；' +
+      '门牌须字符级回传窗内 bookKey；多种可能=多槽各 settle；' +
+      '仅 sufficient 铸 prospectKey（父=bookKey）；unread/insufficient 只记状态；' +
+      '可选 stopReason/seedRange 草案（端点=bookKey，可半开）；' +
+      '台晚执行：锚点须已读、半开配对成闭集后并入下一轮 decide 书序（不再 peek）；' +
+      keyStatusContractHint('bookKey'),
   },
   supervise: {
     job: 'supervise',

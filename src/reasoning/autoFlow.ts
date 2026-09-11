@@ -157,7 +157,8 @@ export function parseDecideOutcome(llmText: string): {
   }
 
   const ingestDecideRow = (r: Record<string, unknown>) => {
-    const bk = String(r.briefKey ?? r.key ?? '').trim()
+    // 实验：bookKey 优先；briefKey 字段亦可回传同一门牌
+    const bk = String(r.bookKey ?? r.briefKey ?? r.key ?? '').trim()
     if (!bk) return
     const rowStatus = normalizeIncrementStatus(r.status ?? r.readStatus)
     const slots = expandIncrementSlots(r.prospect, r.prospects)
@@ -420,7 +421,7 @@ export async function runAutoFlow(input: {
   }
   if (input.decideCritiqueHint?.trim()) notes.push('decideCritiqueHint')
 
-  // —— 层 0：材料前置（冷启 ≠ 结算路）——
+  // —— 层 0：材料前置（实验：无 peek LLM，骨架 bookKey 直入 decide 队列）——
   let sealedBriefKeys: string[] = []
   let sealedItems: Array<{
     key: string
@@ -431,8 +432,10 @@ export async function runAutoFlow(input: {
   let stepId = ''
 
   if (needsColdPeekPrecondition(docId)) {
-    input.onProgress?.('自动流 · 材料前置 · 冷启 peek（书窗骨架）…')
-    notes.push(`材料前置·冷启·qk=${turnQueryKey}`)
+    input.onProgress?.(
+      '自动流 · 材料前置 · 冷启骨架 bookKey（实验·无 peek）…',
+    )
+    notes.push(`材料前置·冷启骨架·qk=${turnQueryKey}`)
     let semantic: import('./semanticIndex').BookSemanticIndex | null = null
     try {
       const { useIndexGate } = await import('./indexGate')
@@ -444,59 +447,30 @@ export async function runAutoFlow(input: {
       bookIndex: input.bookIndex,
       semantic,
     })
-    const peek = await askDeepSeekWithA1({
-      question: q,
-      bookIndex: input.bookIndex,
-      onProgress: input.onProgress,
-      peekMode: 'cold',
-      attachUserUtterance: false,
-      queryKey: turnQueryKey,
-      ...(skeleton.length > 0 ? { candidateKeys: skeleton } : {}),
-    })
-    if (!peek.ok || !peek.items?.length) {
+    const ordered =
+      skeleton.length > 0
+        ? skeleton
+        : input.bookIndex.chunks.map((c) => c.key).filter(Boolean)
+    if (ordered.length === 0) {
       return {
         ok: false,
-        answer: peek.answer || '',
-        note: peek.note || '冷启 peek 无门贴，自动流中止',
+        answer: '',
+        note: '冷启骨架空：A1 无 bookKey，自动流中止',
       }
     }
-    const sealed = input.sealItems(
-      peek.items
-        .filter((it) => Boolean(it.briefKey))
-        .map((it) => {
-          const chunk = input.bookIndex.chunks.find((c) => c.key === it.key)
-          return {
-            key: it.key,
-            brief: it.brief,
-            briefKey: it.briefKey!,
-            bookText: chunk ? atomSearchText(chunk) : undefined,
-          }
-        }),
-    )
-    if (sealed.length === 0) {
-      return {
-        ok: false,
-        answer: parts.join('\n\n'),
-        note: `自动流中止 · 冷启 peek 无 settle briefKey · ${notes.join(' → ')}`,
-      }
-    }
-    sealedItems = sealed
-    sealedBriefKeys = sealed.map((s) => s.briefKey)
-    stepId = useAttentionIo.getState().pushPeekStep({
-      mode: 'cold',
-      question: q,
-      items: sealed,
-      llmCallId: newLlmCallId('peek'),
-    })
-    useAttentionIo.getState().attachBondIds(
-      stepId,
-      sealed.map((s) => ({ bookKey: s.key, bondId: s.bondId })),
-    )
+    // sealedBriefKeys 在本分支语义 = decide 父门 bookKey 队列
+    sealedBriefKeys = ordered.slice(0, DECIDE_BRIEF_CAP)
+    sealedItems = sealedBriefKeys.map((bk) => ({
+      key: bk,
+      brief: '',
+      briefKey: bk,
+    }))
+    attachBriefsToQuestion(q, sealedBriefKeys, turnQueryKey)
     parts.push(
-      `### 自动流 · 材料前置 · 冷启 peek\n${sealed.length} 门贴` +
-        (skeleton.length ? ` · 骨架键×${skeleton.length}` : ' · 整表'),
+      `### 自动流 · 材料前置 · 冷启骨架（无 peek）\nbookKey×${sealedBriefKeys.length}` +
+        (skeleton.length ? ' · TOC/书序头尾' : ' · 整表截帽'),
     )
-    notes.push(`冷启peek ${sealed.length}`)
+    notes.push(`冷启骨架 book×${sealedBriefKeys.length}`)
   }
 
   // —— 层 1：问线分叉（历史 queryKey → 复用前置；否则新铸）——

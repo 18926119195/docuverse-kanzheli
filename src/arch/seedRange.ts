@@ -9,8 +9,9 @@
 import type { BookIndex, AChunk } from '../reasoning/pipelineA'
 import { isRetrievableAtom } from '../reasoning/hybridRetrieve'
 import { mapBriefToBook, doorHasBrief } from '../reasoning/masterTableMap'
+import { resolveToBookKey } from './noPeekExperiment'
 
-/** peek 入参：必须是闭区间两端 briefKey */
+/** 热启区间两端：实验下为 bookKey（亦可兼容旧 briefKey） */
 export type SeedRange = { from: string; to: string }
 
 /** decide 早写草案（可半开） */
@@ -157,9 +158,9 @@ export function fallbackSeedRange(
 function briefBookOrderIndex(
   docId: string,
   bookIndex: BookIndex,
-  briefKey: string,
+  endpointKey: string,
 ): number {
-  const bookKey = mapBriefToBook(docId, briefKey)?.bookKey
+  const bookKey = resolveToBookKey(docId, bookIndex, endpointKey)
   if (!bookKey) return -1
   return orderedRetrievableBookKeys(bookIndex).indexOf(bookKey)
 }
@@ -303,8 +304,8 @@ export function expandClosedSeedRangesToBookKeys(input: {
   const usedClosed: SeedRange[] = []
 
   for (const seed of input.closed) {
-    const fromBook = mapBriefToBook(input.docId, seed.from)?.bookKey
-    const toBook = mapBriefToBook(input.docId, seed.to)?.bookKey
+    const fromBook = resolveToBookKey(input.docId, input.bookIndex, seed.from)
+    const toBook = resolveToBookKey(input.docId, input.bookIndex, seed.to)
     if (!fromBook || !toBook) continue
     let i0 = ordered.indexOf(fromBook)
     let i1 = ordered.indexOf(toBook)
@@ -324,6 +325,7 @@ export function expandClosedSeedRangesToBookKeys(input: {
   const unopened: string[] = []
   const opened: string[] = []
   for (const k of slice) {
+    // 实验无 brief 时大多进 unopened；有旧 brief 的门仍标 opened
     if (doorHasBrief(input.docId, k)) opened.push(k)
     else unopened.push(k)
   }
