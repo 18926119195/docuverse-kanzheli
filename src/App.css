@@ -3970,7 +3970,7 @@ body:not(.fanout-pilot-open) .reasoning-root {
   color: #ffe9a8;
 }
 
-/* ×¢ÒâÁ¦ÃÅÃæ = key µÄ door bbox£»Ç¿µ÷±ÊÍ¬¹¹ bookKey */
+/* æ³¨æ„åŠ›é—¨é¢ = key çš„ door bboxï¼›å¼ºè°ƒç¬”åŒæ„ bookKey */
 .attn-door-face {
   position: relative;
   display: flex;
@@ -4051,7 +4051,7 @@ body:not(.fanout-pilot-open) .reasoning-root {
   background: rgba(255, 140, 60, 0.35);
 }
 
-/* ³£ÏÔ key Ãæ°å£¨Ãªµã´¦Á¢Ãæ£¬·Çµã¿ª´°£© */
+/* å¸¸æ˜¾ key é¢æ¿ï¼ˆé”šç‚¹å¤„ç«‹é¢ï¼Œéç‚¹å¼€çª—ï¼‰ */
 .key-panel-live {
   width: min(280px, 70vw);
   border: 1px solid rgba(200, 210, 230, 0.35);
@@ -4252,7 +4252,7 @@ body:not(.fanout-pilot-open) .reasoning-root {
   opacity: 0.65;
 }
 
-/* ¿Ç¼ä¾àÀ­Á´£ºÍØÆË²»±ä£¬Ö»µ÷ÏàÁÚ¼¸ºÎ²½³¤ */
+/* å£³é—´è·æ‹‰é“¾ï¼šæ‹“æ‰‘ä¸å˜ï¼Œåªè°ƒç›¸é‚»å‡ ä½•æ­¥é•¿ */
 .shell-zipper {
   position: fixed;
   left: 50%;
@@ -4347,7 +4347,7 @@ body:not(.fanout-pilot-open) .reasoning-root {
   text-transform: uppercase;
 }
 
-/* ¡ª¡ª ½áËãÃæ°å£¨ÆÀÂÛ²ãÄ¬ÈÏÌø×ª£º¸´ÓÃ / path£© ¡ª¡ª */
+/* â€”â€” ç»“ç®—é¢æ¿ï¼ˆè¯„è®ºå±‚é»˜è®¤è·³è½¬ï¼šå¤ç”¨ / pathï¼‰ â€”â€” */
 .settlement-desk {
   position: absolute;
   z-index: 45;

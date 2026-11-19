@@ -254,7 +254,7 @@ export async function executeHarnessMotion(input: {
       taskId: input.ctx.taskId,
     })
     actions.push(...results.map((r) => r.action))
-    const okKeys = results.filter((r) => r.ok).map((r) => r.entry?.key).filter(Boolean) as string[]
+    const okKeys = results.filter((r) => r.ok).map((r) => r.entry.key)
     if (okKeys.length > 0) {
       ws = applyFaultIn(ws, okKeys)
     }

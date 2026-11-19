@@ -8,6 +8,7 @@ import { atomSearchText } from './hybridRetrieve'
 import {
   briefContentHash,
   rollDoorBrief,
+  type KeyDecisionEntry,
   type SuggestAction,
 } from './keyDecisionState'
 import {
@@ -49,14 +50,14 @@ export interface PeekOut {
   claimedKey?: string
 }
 
-export interface PeekCastResult {
-  ok: boolean
-  verdict: PeekVerdict
+export type PeekCastResult = {
   action: ActionRecord
-  entry?: ReturnType<typeof rollDoorBrief>
   fails: GateFail[]
   warnings: string[]
-}
+} & (
+  | { ok: true; verdict: 'V0_ok'; entry: KeyDecisionEntry }
+  | { ok: false; verdict: Exclude<PeekVerdict, 'V0_ok'>; entry?: never }
+)
 
 const BRIEF_MAX = 280
 
