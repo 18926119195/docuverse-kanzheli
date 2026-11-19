@@ -17,7 +17,7 @@ import {
   resolveReuse,
   type ClosureSnap,
 } from '../api/_lib/protocol/closureEngine.js'
-import { llmUpstream } from '../api/_lib/env.js'
+import { llmUpstream, zhipuApiKey } from '../api/_lib/env.js'
 
 function injectProcessEnv(mode: string, root: string): void {
   const env = {
@@ -105,6 +105,10 @@ export function viteProtocolApiPlugin(root: string, mode: string): Plugin {
           })
           return
         }
+        if (url.startsWith('/api/zhipu/') && !zhipuApiKey()) {
+          json(res, 500, { error: 'ZHIPU_API_KEY missing on server' })
+          return
+        }
         const isChat = url === '/api/llm/chat/completions'
         if (!isChat) {
           next()
@@ -129,8 +133,12 @@ export function viteProtocolApiPlugin(root: string, mode: string): Plugin {
         }
 
         try {
-          const raw = await readJsonBody(req)
           const upstream = llmUpstream()
+          if (!upstream.apiKey) {
+            json(res, 500, { error: 'LLM_API_KEY missing on server' })
+            return
+          }
+          const raw = await readJsonBody(req)
           const lockedModel = upstream.chatModel
           const body =
             typeof raw === 'object' && raw !== null
