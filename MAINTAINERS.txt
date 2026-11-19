@@ -1,8 +1,8 @@
 docuverse-kanzheli｜保留 peek 的 OCR 和书内实体对照
 开发时间线（原话、实现提交、源码行号和验证）见同目录 DEVELOPMENT_HISTORY.txt。
-https://github.com/18926119195/docuverse-kanzheli/blob/codex/repository-cleanup/DEVELOPMENT_HISTORY.txt
+https://github.com/18926119195/docuverse-kanzheli/blob/main/DEVELOPMENT_HISTORY.txt
 核验 Git 提交 040a9bb1a82cbdd408893510e937afcf157df931
-协作总导航 https://github.com/18926119195/docuverse/blob/codex/repository-cleanup/MAINTAINERS.txt
+协作总导航 https://github.com/18926119195/docuverse/blob/main/MAINTAINERS.txt
 
 这个库在开发什么
 应用在仓库根。PDF 首尾各 20 页是目录前置波次；bookKey 关联 layout 槽；peek 产生 brief 供下游决定，同族多贴与跨族显式修贴有不同约束。
