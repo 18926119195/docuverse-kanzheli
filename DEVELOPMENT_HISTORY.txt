@@ -1,0 +1,126 @@
+Docuverse 看这里开发沿革与贡献入口
+日期均使用北京时间。9 月 8–9 日的聊天有明确时间戳，能定位到的最早仓库代码快照是 9 月 10 日 13:59:25 的 2fed995。因此各节点分别列会话与代码证据。原件行可回到完整上下文。
+
+菜单
+KZ-01  按 layout 地址铸 bookKey，强调笔复用命中区域
+KZ-02  以 LLM 调用批构造进度边和面板
+KZ-03  从同源路径候选到可结算的 normKey
+KZ-04  decide 分批，目录按 strand 分节
+KZ-05  头尾 OCR、增量语料与母族门牌
+KZ-06  no-peek 分支实验
+KZ-07  恢复构建并集中聊天原件入口
+RUN  当前运行入口与协作步骤
+
+KZ-01｜2026-09-08 上午 ｜按 layout 地址铸 bookKey，强调笔复用命中区域
+用户原句（原文摘句，Tuesday, Sep 8, 2026, 9:48 AM (UTC+8)）
+「所以我认为真正的bookkey应该是layout那一个步骤的坐标，而不是ocr那一步的。」
+  原件
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-08-bookkey-emphasize-region-combo.jsonl#L38
+用户原句（原文摘句，Tuesday, Sep 8, 2026, 11:22 AM (UTC+8)）
+「仅仅是空白的具有铸键的可能，其余都是用用一个指针指回去已经有的」
+  原件
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-08-bookkey-emphasize-region-combo.jsonl#L168
+快照中 bookKey 的锁地址由 docId、页与 layoutK 构成。强调笔确认将空白输入铸键流程；区域组合保留已有成员门键。代码可用于定位实现，现有证据未测不同 PDF 上的区域选择误差。
+  src/arch/bookKey.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/arch/bookKey.ts#L14-L24
+  src/reasoning/emphasizeMint.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/emphasizeMint.ts#L33-L92
+  src/reasoning/pipelineA.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/pipelineA.ts#L666-L735
+
+KZ-02｜2026-09-08 下午 ｜以 LLM 调用批构造进度边和面板
+用户原句（原文摘句，Tuesday, Sep 8, 2026, 1:55 PM (UTC+8)）
+「其实我认为这个面板应该弄成就是这次llm的调用的同类型key的集合」
+  原件
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-08-intent-llm-sphere-construction.jsonl#L168
+快照中的进度图读取本问调用账，边带 llmCallId 和成员 keys。意图 show 可调取批面板。KeyPanelLayer 接入真实场景。单有登记记录还不能证明用户见到正确的 WebGL 布局。
+  src/reasoning/turnJobProgress.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/turnJobProgress.ts#L53-L117
+  src/reasoning/intentDeskRouter.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/intentDeskRouter.ts#L688-L706
+  src/canvas/CvsScene.tsx
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/canvas/CvsScene.tsx#L103-L113
+
+KZ-03｜2026-09-09 ｜从同源路径候选到可结算的 normKey
+用户原句（原文摘句，Wednesday, Sep 9, 2026, 7:02 PM (UTC+8)）
+「另外一种情况就是显示出pathkey，然后用户确认还是撤销，确认（不修改完善）就直接登记为normalkey了」
+  原件
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-09-path-lineage-supervise-norm.jsonl#L220
+同源材料约束 infer 和 prospect 的路径候选。勾选后优先用用户的整理正文，缺省可用原 infer 与 prospect 组合登记 norm。跳过人工确认可由监督评定并登记，复用闸读取历史 norm。代码中的正式字段名是 normKey。
+  src/reasoning/pathLineageBind.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/pathLineageBind.ts#L65-L111
+  src/reasoning/attentionIoStore.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/attentionIoStore.ts#L1892-L1940
+  src/reasoning/letterDeskDispatch.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/reasoning/letterDeskDispatch.ts#L695-L749
+  src/reasoning/letterDeskDispatch.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/reasoning/letterDeskDispatch.ts#L1037-L1071
+
+KZ-04｜2026-09-10 上午 ｜decide 分批，目录按 strand 分节
+用户原句（原文摘句，Thursday, Sep 10, 2026, 12:03 PM (UTC+8)）
+「我认为肯定需要的是分批次然后并行处理的」
+  原件
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-10-settlement-ui-toc-map-399aab3e.jsonl#L59
+用户原句（原文摘句，Thursday, Sep 10, 2026, 1:31 PM (UTC+8)）
+「去匹配不同的分节之间的位置，方便写信台将这些范围和bookkey分配好给冷启动的peek。」
+  原件
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-10-settlement-ui-toc-map-399aab3e.jsonl#L170
+decide 进入有限并发，存在可铸项可触发客户端早停，供应商是否继续生成与计费没有验证。目录向导调用 toc_map 按 strand 输出分节，供冷启选窗口。09-10 晚间版保留 decide 早停、取消冷启 peek 早停，两者是不同调用点。
+  src/reasoning/autoFlow.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/autoFlow.ts#L858-L881
+  src/reasoning/autoFlow.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/reasoning/autoFlow.ts#L923-L929
+  src/ui/TocWizard.tsx
+  https://github.com/18926119195/docuverse-kanzheli/blob/2fed995e81bc9d3bad16e94c782548813338a1e9/src/ui/TocWizard.tsx#L91-L132
+  src/reasoning/a1DsChat.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/reasoning/a1DsChat.ts#L675-L685
+
+KZ-05｜2026-09-10 下午 ｜头尾 OCR、增量语料与母族门牌
+用户原句（原文摘句，Thursday, Sep 10, 2026, 3:46 PM (UTC+8)）
+「不要按照头尾15%，而是按照头尾各20页。」
+  原件
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-10-bookkey-ocr-ingest-pipeline-9175a123.jsonl#L118
+扫描件先以受限并发处理头尾各 20 页（短书缩减），头尾完成打开 TOC，中间随后后台 OCR 并同步索引。因此 toc_map 前已有头尾 OCR，中间 OCR 无需等待用户完成分节。语料包能瘦加载并恢复 keyLineage。同母族允许同门多贴，跨族修贴需要显式 revise。
+  src/data/pdfPagePipeline.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/data/pdfPagePipeline.ts#L24-L39
+  src/data/pdfPagePipeline.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/data/pdfPagePipeline.ts#L326-L335
+  src/ui/PdfUploadPanel.tsx
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/ui/PdfUploadPanel.tsx#L150-L187
+  src/ui/PdfUploadPanel.tsx
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/ui/PdfUploadPanel.tsx#L271-L307
+  src/reasoning/keyDecisionState.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/reasoning/keyDecisionState.ts#L156-L220
+
+KZ-06｜2026-09-11 ｜no-peek 分支实验
+实验分支把冷启书骨架送入 decide，允许 prospect 以 bookKey 为父门，同时保留旧 brief 回查兼容。这是 experiment/no-peek-prospect-as-index 自己的代码，main 和本文件的整理分支仍保有 peek 主流程。此项目节点仅有可核对的 Git 证据，未附会话原句或整链实测。
+  src/arch/noPeekExperiment.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/42ea3d012f2aa68c1ac3a145792d653beb0cc144/src/arch/noPeekExperiment.ts#L11-L42
+  src/reasoning/autoFlow.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/42ea3d012f2aa68c1ac3a145792d653beb0cc144/src/reasoning/autoFlow.ts#L424-L473
+
+KZ-07｜2026-11-19 ｜恢复构建并集中聊天原件入口
+修复 peekCast 成功分支的 entry 类型，网关按实际门键推进工作集。将 App.css 四行非 UTF-8 注释转为 UTF-8，修正三态否定表达。模型凭据改为服务端环境变量。生产构建、API TS 检查通过，Lint 退出 0 并保留警告。本地夹具验证同问、BM25、母族修贴、55 页测试中的头尾范围、并发上限和无凭据 Mock；真实 OCR 与全量 PDF 用户流程未验证。
+聊天原件旧路径“聊天记录-今日原文/”有 12 份，11 份消重到同一 Git blob 的 docs/chat-archive 文件，独有的 GitHub 同步会话以原字节移入 docs/chat-archive。引用旧路径时可按 PATHS.txt 找到新文件，也可在原提交逐字查看。
+  src/reasoning/peekCast.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/939d7e7812b19ea794edeae3dc632515d90fd62f/src/reasoning/peekCast.ts#L51-L61
+  src/reasoning/harnessGateway.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/939d7e7812b19ea794edeae3dc632515d90fd62f/src/reasoning/harnessGateway.ts#L241-L264
+  src/arch/keyIncrementStatus.ts
+  https://github.com/18926119195/docuverse-kanzheli/blob/939d7e7812b19ea794edeae3dc632515d90fd62f/src/arch/keyIncrementStatus.ts#L49-L68
+  docs/archive/PATHS.txt
+  https://github.com/18926119195/docuverse-kanzheli/blob/e4e5655799d4ad64ef7683553ef6a55c30177546/docs/archive/PATHS.txt
+  独有归档的新地址
+  https://github.com/18926119195/docuverse-kanzheli/blob/e4e5655799d4ad64ef7683553ef6a55c30177546/docs/chat-archive/2026-09-10-github-sync-prep-120c9369.jsonl
+
+当前运行入口与协作步骤
+以分支 codex/repository-cleanup 的 e4e5655799d4ad64ef7683553ef6a55c30177546 为本文件核对的整理基线。普通问题从 src/main.tsx → App → A1ChatDock → runComposerTurn / autoFlow 顺读。文档导入从 PdfUploadPanel → pdfPagePipeline 进入；目录使用 TocWizard，用户批准 path/norm 或复用的入口是 SettlementDeskPanel。
+复现时运行 npm ci、npm run dev。提交前运行 npm run build、npm run lint、npx tsc -p api/tsconfig.json --noEmit。按任务开分支。分别注明从扫描件、已有文本层 PDF 或语料包哪条入口验证，记录是否调用真实服务和是否核对用户结算。变更编排时给出原件路径/行、关联 key、前后调用点和实测。新增原件放 docs/chat-archive，保留原角色、时间戳与顺序。
+  package.json
+  https://github.com/18926119195/docuverse-kanzheli/blob/e4e5655799d4ad64ef7683553ef6a55c30177546/package.json#L6-L11
+  src/ui/A1ChatDock.tsx
+  https://github.com/18926119195/docuverse-kanzheli/blob/e4e5655799d4ad64ef7683553ef6a55c30177546/src/ui/A1ChatDock.tsx#L66-L99
+  src/ui/PdfUploadPanel.tsx
+  https://github.com/18926119195/docuverse-kanzheli/blob/e4e5655799d4ad64ef7683553ef6a55c30177546/src/ui/PdfUploadPanel.tsx#L80-L101
+  src/ui/SettlementDeskPanel.tsx
+  https://github.com/18926119195/docuverse-kanzheli/blob/e4e5655799d4ad64ef7683553ef6a55c30177546/src/ui/SettlementDeskPanel.tsx#L92-L124
