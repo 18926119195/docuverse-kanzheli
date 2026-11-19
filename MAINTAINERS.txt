@@ -20,3 +20,5 @@ https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e
 维护边界和下次接续
 保留 main 作为有 peek 对照。源图、布局、OCR 文本分别做夹具，覆盖同槽 OCR 更新、目录缺页和跨族贴。保留本库的 no-peek 实验引用以便追踪，但实验结果应标明具体提交。
 本文件只依据 Git 提交关系、可定位的聊天原件和源码。候选改动需要以正常入口及复跑证据验收。
+
+文件整理与旧路径映射见 docs/archive/PATHS.txt。
