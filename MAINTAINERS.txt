@@ -1,0 +1,22 @@
+docuverse-kanzheli｜保留 peek 的 OCR 和书内实体对照
+核验 Git 提交 040a9bb1a82cbdd408893510e937afcf157df931
+协作总导航 https://github.com/18926119195/docuverse/blob/codex/repository-cleanup/MAINTAINERS.txt
+
+这个库在开发什么
+应用在仓库根。PDF 首尾各 20 页是目录前置波次；bookKey 关联 layout 槽；peek 产生 brief 供下游决定，同族多贴与跨族显式修贴有不同约束。
+
+首次阅读的代码入口
+src/data/pdfPagePipeline.ts → src/arch/bookKey.ts → src/reasoning/peekCast.ts / keyDecisionState.ts → autoFlow.ts。先确认引用的是 main。
+https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/data/pdfPagePipeline.ts#L33
+https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/arch/bookKey.ts#L1
+https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/reasoning/peekCast.ts#L90
+https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/reasoning/keyDecisionState.ts#L160
+https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/src/reasoning/autoFlow.ts#L379
+
+相关聊天原件
+用户原文「所以我认为真正的bookkey应该是layout那一个步骤的坐标，而不是ocr那一步的。」
+https://github.com/18926119195/docuverse-kanzheli/blob/040a9bb1a82cbdd408893510e937afcf157df931/docs/chat-archive/2026-09-08-bookkey-emphasize-region-combo.jsonl#L38
+
+维护边界和下次接续
+保留 main 作为有 peek 对照。源图、布局、OCR 文本分别做夹具，覆盖同槽 OCR 更新、目录缺页和跨族贴。保留本库的 no-peek 实验引用以便追踪，但实验结果应标明具体提交。
+本文件只依据 Git 提交关系、可定位的聊天原件和源码。候选改动需要以正常入口及复跑证据验收。
