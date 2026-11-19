@@ -23,12 +23,8 @@ Cursor agent transcripts for Docuverse（「看这里」快照）。
 | `2026-09-10-bookkey-ocr-ingest-pipeline-9175a123.jsonl` | `9175a123-30a2-42ff-a4d2-caa251630d28` | bookKey=layout；头尾各20页硬闸后目录；中间后台 OCR；语料包 v2+母系记忆；瘦载入/LLM入窗预取；冷启扫完骨架不早停；TOC memberKeys 回填；peek 同母族硬闸 |
 
 权威依据（架构）：`2026-09-03-architecture-align.jsonl` + 本仓库现码。  
-今日原文另见根目录 `聊天记录-今日原文/`；完整导出亦入库 `2026-09-08-bookkey-definition-inquiry-full.ini`。  
+会话原件与完整导出都在本目录，旧路径及对应 Git 对象见 [路径索引](../archive/PATHS.txt)。
 `又一次新的chat` 含多份 BookKey 全文重复粘贴，**不入库**；只归档其 thinking 实测增量。
-原文副本：`聊天记录-今日原文/2026-09-09-path-lineage-supervise-norm-26025a7c.jsonl`；  
-`聊天记录-今日原文/2026-09-10-settlement-ui-toc-map-399aab3e.jsonl`；  
-`聊天记录-今日原文/2026-09-10-deepseek-kv-vs-docuverse-architecture-ea8633ff.jsonl`；  
-`聊天记录-今日原文/2026-09-10-bookkey-ocr-ingest-pipeline-9175a123.jsonl`。
 
 ## 2026-09-08 落地摘要
 
